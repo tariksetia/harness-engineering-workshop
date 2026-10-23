@@ -9,7 +9,7 @@
 """
 
 from harness import provider
-from harness.schema.loop import BeforeTool, BeforeTurn, OnEvent, Tool
+from harness.schema.loop import AssistantEvent, BeforeTool, BeforeTurn, OnEvent, Tool
 from harness.schema.provider import AssistantMessage, Message, ToolCall, ToolSpec
 
 
@@ -70,7 +70,8 @@ def _turn(
     completion = provider.complete(model, system, messages, specs)
     reply: AssistantMessage = {"role": "assistant", "text": completion["text"], "tool_calls": completion["tool_calls"]}
     messages.append(reply)
-    on_event("assistant", {**reply, "usage": completion["usage"]})
+    event: AssistantEvent = {**reply, "usage": completion["usage"]}
+    on_event("assistant", event)
     return reply
 
 

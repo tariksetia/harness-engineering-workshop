@@ -5,8 +5,9 @@
 """
 
 import sys
+from typing import cast
 
-from harness.schema.loop import EventPayload
+from harness.schema.loop import AssistantEvent, EventKind, EventPayload
 
 SYSTEM = "You are a helpful assistant."
 
@@ -26,11 +27,12 @@ def main() -> None:
     print(reply)
 
 
-def _print_event(kind: str, payload: EventPayload) -> None:
+def _print_event(kind: EventKind, payload: EventPayload) -> None:
     """Report tool-call count and usage of each assistant reply on stderr.
 
     - kind: loop event kind; only "assistant" is reported.
     - payload: event data emitted by the loop.
     """
     if kind == "assistant":
-        print(f"[assistant] tool_calls={len(payload['tool_calls'])} usage={payload['usage']}", file=sys.stderr)
+        reply = cast(AssistantEvent, payload)  # The kind names the payload shape.
+        print(f"[assistant] tool_calls={len(reply['tool_calls'])} usage={reply['usage']}", file=sys.stderr)

@@ -6,7 +6,7 @@
   1. Auth is a Bedrock API key (short- or long-term) sent as a bearer token —
      no SigV4, no boto3.
   2. Configuration comes from env vars (loaded via dotenv), never hard-coded.
-  3. Translation is pure: dicts in, dicts out; no I/O besides env reads.
+  3. Translation is pure: typed dicts in, typed dicts out; no I/O besides env reads.
 """
 
 import os
@@ -14,8 +14,23 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 
-from harness.schema.bedrock import ConverseBlock, ConverseMessage, ConverseRequest
-from harness.schema.provider import JsonDict, WireContent, WirePart, WireRequest
+from harness.schema.bedrock import (
+    ConverseMessage,
+    ConverseRequest,
+    ConverseResponse,
+    ConverseTool,
+    RequestBlock,
+    ResponseBlock,
+)
+from harness.schema.provider import (
+    FunctionCall,
+    FunctionDeclaration,
+    FunctionResponse,
+    WireContent,
+    WirePart,
+    WireRequest,
+    WireResponse,
+)
 
 load_dotenv()
 
@@ -91,11 +106,10 @@ def to_converse(model: str, body: WireRequest) -> ConverseRequest:
     return request
 
 
-def from_converse(response: JsonDict) -> JsonDict:
+def from_converse(response: ConverseResponse) -> WireResponse:
     """Translate a Converse response into a Gemini-shaped response.
 
     - response: parsed JSON returned by the Converse endpoint.
-    - Returns {"candidates": [{"content": {...}}], "usageMetadata": {...}}.
     """
     blocks = response.get("output", {}).get("message", {}).get("content", [])
     parts = [part for block in blocks if (part := _to_part(block)) is not None]
@@ -118,10 +132,10 @@ def _max_tokens(model: str, requested: int) -> int:
     return min(requested, ANTHROPIC_MAX_TOKENS) if "anthropic." in model else requested
 
 
-def _tool_spec(declaration: JsonDict) -> JsonDict:
+def _tool_spec(declaration: FunctionDeclaration) -> ConverseTool:
     """Wrap one function declaration as a Converse toolSpec.
 
-    - declaration: {"name", "description", "parameters"} schema dict.
+    - declaration: the tool as the model sees it.
     """
     return {
         "toolSpec": {
@@ -145,7 +159,7 @@ def _to_messages(contents: list[WireContent], flatten_tools: bool) -> list[Conve
     pending_ids: list[str] = []
     for content in contents:
         role = "assistant" if content["role"] == "model" else "user"
-        blocks: list[ConverseBlock] = []
+        blocks: list[RequestBlock] = []
         for part in content["parts"]:
             if "functionCall" in part:
                 tool_id = part.get("thoughtSignature") or f"call_{len(messages)}_{len(blocks)}"
@@ -167,10 +181,10 @@ def _to_messages(contents: list[WireContent], flatten_tools: bool) -> list[Conve
     return messages
 
 
-def _call_block(call: JsonDict, tool_id: str, flatten: bool) -> ConverseBlock:
+def _call_block(call: FunctionCall, tool_id: str, flatten: bool) -> RequestBlock:
     """Translate a wire functionCall into a Converse block.
 
-    - call: {"name", "args"} from the wire part.
+    - call: tool name and arguments from the wire part.
     - tool_id: toolUseId that the matching result will reference.
     - flatten: emit text instead of a toolUse block.
     """
@@ -179,10 +193,10 @@ def _call_block(call: JsonDict, tool_id: str, flatten: bool) -> ConverseBlock:
     return {"toolUse": {"toolUseId": tool_id, "name": call["name"], "input": call.get("args", {})}}
 
 
-def _result_block(response: JsonDict, tool_id: str, flatten: bool) -> ConverseBlock:
+def _result_block(response: FunctionResponse, tool_id: str, flatten: bool) -> RequestBlock:
     """Translate a wire functionResponse into a Converse block.
 
-    - response: {"name", "response": {"result": text}} from the wire part.
+    - response: tool name and result from the wire part.
     - tool_id: toolUseId of the call this result answers.
     - flatten: emit text instead of a toolResult block.
     """
@@ -192,7 +206,7 @@ def _result_block(response: JsonDict, tool_id: str, flatten: bool) -> ConverseBl
     return {"toolResult": {"toolUseId": tool_id, "content": [{"text": result}]}}
 
 
-def _to_part(block: ConverseBlock) -> WirePart | None:
+def _to_part(block: ResponseBlock) -> WirePart | None:
     """Translate one Converse output block into a wire part.
 
     - block: text, toolUse, or reasoningContent block.

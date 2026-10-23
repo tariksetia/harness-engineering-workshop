@@ -15,7 +15,19 @@ import urllib.error
 import urllib.request
 
 from harness import bedrock
-from harness.schema.provider import Completion, JsonDict, Message, ToolCall, ToolSpec, WireContent, WirePart, WireRequest
+from harness.schema.bedrock import ConverseRequest, ConverseResponse
+from harness.schema.provider import (
+    Completion,
+    FunctionCallPart,
+    FunctionResponse,
+    Message,
+    ToolCall,
+    ToolSpec,
+    WireContent,
+    WirePart,
+    WireRequest,
+    WireResponse,
+)
 
 RETRYABLE_STATUS = {429, 500, 502, 503}
 
@@ -51,7 +63,7 @@ def _to_wire(messages: list[Message]) -> list[WireContent]:
         elif message["role"] == "assistant":
             parts: list[WirePart] = [{"text": message["text"]}] if message["text"] else []
             for call in message["tool_calls"]:
-                part: WirePart = {"functionCall": {"name": call["name"], "args": call["args"]}}
+                part: FunctionCallPart = {"functionCall": {"name": call["name"], "args": call["args"]}}
                 # Gemini 3 rejects a replayed functionCall without its
                 # signature; Bedrock carries the toolUseId the same way.
                 if call["signature"] is not None:
@@ -59,12 +71,12 @@ def _to_wire(messages: list[Message]) -> list[WireContent]:
                 parts.append(part)
             contents.append({"role": "model", "parts": parts})
         else:
-            response = {"name": message["name"], "response": {"result": message["text"]}}
+            response: FunctionResponse = {"name": message["name"], "response": {"result": message["text"]}}
             contents.append({"role": "user", "parts": [{"functionResponse": response}]})
     return contents
 
 
-def _parse(response: JsonDict) -> Completion:
+def _parse(response: WireResponse) -> Completion:
     """Parse a wire response into a Completion.
 
     - response: Gemini-shaped response with candidates and usageMetadata.
@@ -85,11 +97,11 @@ def _parse(response: JsonDict) -> Completion:
     }
 
 
-def _post(url: str, body: JsonDict, retries: int = 5) -> JsonDict:
-    """POST a JSON body and return the parsed JSON response.
+def _post(url: str, body: ConverseRequest, retries: int = 5) -> ConverseResponse:
+    """POST a Converse request and return the parsed Converse response.
 
-    - url: endpoint to call.
-    - body: JSON-serializable request body.
+    - url: Converse endpoint to call.
+    - body: request body, serialized as JSON.
     - retries: total attempts before giving up on transient failures.
     """
     data = json.dumps(body).encode()

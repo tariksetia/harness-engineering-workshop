@@ -8,10 +8,11 @@
 """
 
 import random
+from typing import cast
 
 from harness import bedrock
 from harness.loop import run_loop
-from harness.schema.loop import EventPayload
+from harness.schema.loop import AssistantEvent, BlockReason, EventKind, EventPayload, ToolEndEvent, ToolStartEvent
 from harness.schema.provider import Message, ToolCall, ToolSpec
 
 TASK = "Roll 3 dice and tell me whether the total beats 10"
@@ -45,24 +46,27 @@ class RollDice:
         return [random.randint(1, 6) for _ in range(int(count))]
 
 
-def print_event(kind: str, payload: EventPayload) -> None:
+def print_event(kind: EventKind, payload: EventPayload) -> None:
     """Print one loop event as a transcript line.
 
     - kind: "assistant", "tool_start", or "tool_end".
     - payload: event data emitted by the loop.
     """
+    # The kind names the payload shape; the casts make that pairing explicit.
     if kind == "assistant":
-        for call in payload["tool_calls"]:
+        reply = cast(AssistantEvent, payload)
+        for call in reply["tool_calls"]:
             print(f"[assistant] tool call: {call['name']}({call['args']})")
-        if payload["text"]:
-            print(f"[assistant] {payload['text']}")
+        if reply["text"]:
+            print(f"[assistant] {reply['text']}")
     elif kind == "tool_start":
-        print(f"[tool_start] {payload['name']}")
+        print(f"[tool_start] {cast(ToolStartEvent, payload)['name']}")
     elif kind == "tool_end":
-        print(f"[tool] {payload['name']} -> {payload['result']}")
+        end = cast(ToolEndEvent, payload)
+        print(f"[tool] {end['name']} -> {end['result']}")
 
 
-def allow_all(call: ToolCall) -> str | None:
+def allow_all(call: ToolCall) -> BlockReason:
     """Allow every tool call.
 
     - call: the tool call about to run (ignored).

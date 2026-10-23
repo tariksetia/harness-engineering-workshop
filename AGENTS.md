@@ -15,4 +15,7 @@ Use uv to install and to run the `harness` console script.
 - Every function public or private carries a docstring.  
 - Where behavior is subtle — the thought-signature echo, the edit uniqueness rule, the torn-line tolerance — a short comment states the constraint the code serves.
 - Every function must have type definition and type hints. Complex type must be defined in harnes.schema.{module_name}.py
+    - Reading types must be self explaining
+    - use docstrings for types if needed
 - Keep .env.example file update to date with actual env vars that are being used. Use dotenv to load env vars
+- 
